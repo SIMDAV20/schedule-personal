@@ -1,17 +1,38 @@
-## Start Laravel Reverb
+## Laravel Reverb (Real-time)
 
-php artisan reverb:start
+Se ha implementado **Laravel Reverb** para actualizar el calendario del administrador en tiempo real cuando un paseador agrega o elimina su disponibilidad.
 
-## Stop Laravel Reverb
+### Pasos de Implementación:
 
-php artisan reverb:stop
+1. **Evento de Transmisión:**
+   - Se creó el evento `App\Events\AvailabilityUpdated`.
+   - Implementa `ShouldBroadcastNow` para envío inmediato.
+   - Transmite en el canal privado `admin.schedule`.
 
-## Restart Laravel Reverb
+2. **Backend (Controlador):**
+   - En `AvailabilityController`, se dispara el evento `AvailabilityUpdated::dispatch()` después de cada inserción, actualización o eliminación de registros.
 
-php artisan reverb:restart
+3. **Canales (Autorización):**
+   - En `routes/channels.php`, se definió el acceso al canal `admin.schedule`.
+   - Solo los usuarios con el rol `admin` están autorizados para escuchar este canal.
 
+4. **Frontend (Vue + Echo):**
+   - En `Admin/Schedule.vue`, se usa `onMounted` para suscribirse al canal.
+   - Al recibir el evento, el componente ejecuta `router.reload({ only: ['paseadores', 'pendingReservations'] })`.
+   - Esto realiza una recarga parcial de los datos vía Inertia, actualizando el calendario sin refrescar toda la página.
 
-// reservations table
+### Comandos Reverb:
+
+- **Iniciar:** `php artisan reverb:start`
+- **Detener:** `php artisan reverb:stop`
+- **Reiniciar:** `php artisan reverb:restart`
+
+---
+
+## Base de Datos (Notas)
+
+### Tabla de Reservas (`reservations`)
+
 $table->foreignId('paseador_id')->nullable()->change(); // permite reservas sin paseador
 $table->string('status')->default('pending'); // pending | confirmed | cancelled
 ```

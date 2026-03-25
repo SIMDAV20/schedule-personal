@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, onMounted } from "vue";
 import { router, useForm } from "@inertiajs/vue3";
 import FullCalendar from "@fullcalendar/vue3";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -555,6 +555,15 @@ const submitAssign = () => {
         onSuccess: () => closeAssignModal(),
     });
 };
+
+onMounted(() => {
+    if (typeof window !== 'undefined' && window.Echo) {
+        window.Echo.private('admin.schedule')
+            .listen('AvailabilityUpdated', () => {
+                router.reload({ only: ['paseadores', 'pendingReservations'] });
+            });
+    }
+});
 </script>
 
 <template>

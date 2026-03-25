@@ -28,6 +28,9 @@ class AvailabilityController extends Controller
 
         $availability = auth()->user()->availabilities()->create($data);
         $availability->districts()->attach($data['district_ids']);
+
+        \App\Events\AvailabilityUpdated::dispatch();
+
         return back();
     }
 
@@ -59,11 +62,17 @@ class AvailabilityController extends Controller
 
         $availability->update($data);
         $availability->districts()->sync($data['district_ids']);
+
+        \App\Events\AvailabilityUpdated::dispatch();
+
         return back();
     }
 
     public function destroy(Availability $availability) {
         $availability->delete();
+
+        \App\Events\AvailabilityUpdated::dispatch();
+
         return back();
     }
 }
