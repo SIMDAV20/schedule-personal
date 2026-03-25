@@ -10,6 +10,11 @@ declare global {
 
     /* eslint-disable no-var */
     var route: typeof ziggyRoute;
+    
+    interface Window {
+        Echo: Echo;
+        Pusher: any;
+    }
 }
 
 declare module 'vue' {
