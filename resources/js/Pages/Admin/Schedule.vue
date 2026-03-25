@@ -6,6 +6,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import type { CalendarOptions, EventInput, EventClickArg } from "@fullcalendar/core";
 import Modal from "@/Components/Modal.vue";
+import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 
 interface District {
     id: number;
@@ -28,6 +29,9 @@ interface Reservation {
     end_time: string;
     client_name?: string;
     district_id?: number;
+    district?: District;
+    status?: string;
+    status_name?: string;
     notes?: string | null;
 }
 
@@ -40,6 +44,7 @@ interface Paseador {
 
 interface Props {
     paseadores: Paseador[];
+    pendingReservations: Reservation[];
     districts: District[];
     selectedDistrict: number | null;
     days: string[];
@@ -91,6 +96,10 @@ const dayNameToNumber: Record<string, number> = {
     Viernes: 5,
     Sábado: 6,
 };
+const jsDayToString: Record<number, string> = {
+    0: "Domingo", 1: "Lunes", 2: "Martes", 3: "Miércoles",
+    4: "Jueves", 5: "Viernes", 6: "Sábado",
+};
 
 /**
  * FullCalendar needs real ISO dates. We anchor to the current week so that
@@ -132,11 +141,6 @@ const mergedSlots = computed<MergedSlot[]>(() => {
             if (!groups.has(key)) groups.set(key, []);
             groups.get(key)!.push(av);
         }
-
-        const jsDayToString: Record<number, string> = {
-            0: "Domingo", 1: "Lunes", 2: "Martes", 3: "Miércoles",
-            4: "Jueves", 5: "Viernes", 6: "Sábado",
-        };
 
         for (const [key, avs] of groups) {
             const [day, slotStart, slotEnd] = key.split("|");
@@ -225,6 +229,7 @@ const calendarOptions = computed<CalendarOptions>(() => ({
     events: calendarEvents.value,
     eventCursor: "pointer",
     eventClick: openModal,
+    dateClick: (info) => openFreeCreateModal(info.date),
     eventDidMount(info) {
         // Tooltip nativo con distrito
         const districts = info.event.extendedProps.districts as string;
@@ -347,10 +352,6 @@ const openModal = (arg: EventClickArg) => {
     const slotEnd = end.toTimeString().slice(0, 5);
     const accentColor = paseadorColorMap.value.get(paseador.id)?.[1] ?? "#6366f1";
 
-    const jsDayToString: Record<number, string> = {
-        0: "Domingo", 1: "Lunes", 2: "Martes", 3: "Miércoles",
-        4: "Jueves", 5: "Viernes", 6: "Sábado",
-    };
     const dayName = jsDayToString[start.getDay()];
     const reservedHours = paseador.reservations
         .filter((r) => jsDayToString[new Date(r.date).getDay()] === dayName)
@@ -441,25 +442,143 @@ const deleteReservation = () => {
         onError: () => { deleteProcessing.value = false; },
     });
 };
+
+// ---------------------------------------------------------------------------
+// Modal 3 — Crear reserva libre (sin paseador)
+// ---------------------------------------------------------------------------
+
+const showFreeCreateModal = ref(false);
+const freeCreateForm = useForm({
+    date: "",
+    start_time: "",
+    end_time: "",
+    district_id: "",
+    client_name: "",
+    notes: "",
+    hours: 1,
+});
+
+const openFreeCreateModal = (dateObj?: Date) => {
+    freeCreateForm.reset();
+    if (dateObj) {
+        freeCreateForm.date = dateObj.toISOString().slice(0, 10);
+        freeCreateForm.start_time = dateObj.toTimeString().slice(0, 5);
+        freeCreateForm.hours = 1;
+    } else {
+        freeCreateForm.date = new Date().toISOString().slice(0, 10);
+        freeCreateForm.start_time = "09:00";
+        freeCreateForm.hours = 1;
+    }
+    showFreeCreateModal.value = true;
+};
+
+const closeFreeCreateModal = () => {
+    showFreeCreateModal.value = false;
+    freeCreateForm.reset();
+};
+
+const submitFreeReservation = () => {
+    const startH = parseInt(freeCreateForm.start_time.slice(0, 2));
+    freeCreateForm.end_time = `${pad(startH + freeCreateForm.hours)}:00`;
+
+    freeCreateForm.post("/admin/reservations", {
+        preserveScroll: true,
+        onSuccess: () => closeFreeCreateModal(),
+    });
+};
+
+// ---------------------------------------------------------------------------
+// Modal 4 — Asignar paseador a reserva pendiente
+// ---------------------------------------------------------------------------
+
+const showAssignModal = ref(false);
+const assigningReservation = ref<Reservation | null>(null);
+
+const assignForm = useForm({
+    paseador_id: "",
+});
+
+const availablePaseadoresForPending = computed(() => {
+    if (!assigningReservation.value) return [];
+    
+    const r = assigningReservation.value;
+    const districtId = r.district_id;
+    const resDay = jsDayToString[new Date(r.date + 'T12:00:00').getDay()]; // Avoid timezone skew
+    
+    return props.paseadores.filter(p => {
+        // Condition 1: Has availability
+        const hasAvailability = p.availabilities.some(av => {
+            return av.day_name === resDay && 
+                   av.start_time.slice(0,5) <= r.start_time.slice(0,5) &&
+                   av.end_time.slice(0,5) >= r.end_time.slice(0,5) &&
+                   av.districts.some(d => d.id === districtId);
+        });
+
+        if (!hasAvailability) return false;
+
+        // Condition 2: No conflicting reservations
+        const hasConflict = p.reservations.some(pres => {
+            return pres.date === r.date &&
+                   !(pres.end_time.slice(0,5) <= r.start_time.slice(0,5) || 
+                     pres.start_time.slice(0,5) >= r.end_time.slice(0,5));
+        });
+
+        return !hasConflict;
+    });
+});
+
+const openAssignModal = (reservation: Reservation) => {
+    assigningReservation.value = reservation;
+    assignForm.reset();
+    showAssignModal.value = true;
+};
+
+const closeAssignModal = () => {
+    showAssignModal.value = false;
+    assigningReservation.value = null;
+    assignForm.reset();
+};
+
+const submitAssign = () => {
+    if (!assigningReservation.value) return;
+    
+    assignForm.put(`/admin/reservations/${assigningReservation.value.id}/assign`, {
+        preserveScroll: true,
+        onSuccess: () => closeAssignModal(),
+    });
+};
 </script>
 
 <template>
-    <div class="max-w-6xl mx-auto p-6 space-y-4">
+    <AuthenticatedLayout>
+        <template #header>
+            <h2 class="font-semibold text-xl text-gray-800 leading-tight">Horario</h2>
+        </template>
+        <div class="max-w-6xl mx-auto p-6 space-y-4">
         <!-- Header -->
         <div class="flex items-center justify-between flex-wrap gap-3">
-            <h1 class="text-xl font-semibold">Schedule overview</h1>
+            <h1 class="text-xl font-semibold">Resumen de horarios</h1>
 
-            <!-- District filter -->
-            <select
-                :value="selectedDistrict"
-                @change="filterDistrict(($event.target as HTMLSelectElement).value)"
-                class="border rounded px-3 py-1.5 text-sm"
-            >
-                <option value="">All districts</option>
-                <option v-for="d in districts" :key="d.id" :value="d.id">
-                    {{ d.name }}
-                </option>
-            </select>
+            <div class="flex items-center gap-3">
+                <!-- District filter -->
+                <select
+                    :value="selectedDistrict"
+                    @change="filterDistrict(($event.target as HTMLSelectElement).value)"
+                    class="border rounded px-3 py-1.5 text-sm"
+                >
+                    <option value="">Todos los distritos</option>
+                    <option v-for="d in districts" :key="d.id" :value="d.id">
+                        {{ d.name }}
+                    </option>
+                </select>
+
+                <button
+                    @click="openFreeCreateModal()"
+                    class="bg-indigo-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-indigo-700"
+                >
+                    Nueva reserva
+                </button>
+            </div>
         </div>
 
         <!-- Calendar -->
@@ -520,6 +639,44 @@ const deleteReservation = () => {
                 <span class="w-3 h-3 rounded inline-block border-2 border-dashed border-gray-400 bg-gray-100"></span>
                 Con reserva
             </span>
+        </div>
+
+        <!-- Pending Reservations -->
+        <div v-if="pendingReservations.length > 0" class="mt-8 border-t pt-6">
+            <h2 class="text-lg font-semibold mb-4 text-gray-800">Reservas Pendientes (Sin Paseador)</h2>
+            <div class="bg-white rounded-lg border overflow-hidden">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-gray-50 text-gray-600 border-b">
+                        <tr>
+                            <th class="px-4 py-3 font-medium">Fecha</th>
+                            <th class="px-4 py-3 font-medium">Hora</th>
+                            <th class="px-4 py-3 font-medium">Cliente</th>
+                            <th class="px-4 py-3 font-medium">Distrito</th>
+                            <th class="px-4 py-3 font-medium">Estado</th>
+                            <th class="px-4 py-3 font-medium text-right">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y text-gray-700">
+                        <tr v-for="pr in pendingReservations" :key="pr.id" class="hover:bg-gray-50 transition-colors">
+                            <td class="px-4 py-3">{{ pr.date }}</td>
+                            <td class="px-4 py-3 truncate">{{ pr.start_time.slice(0,5) }} – {{ pr.end_time.slice(0,5) }}</td>
+                            <td class="px-4 py-3">{{ pr.client_name }}</td>
+                            <td class="px-4 py-3">{{ pr.district?.name || '—' }}</td>
+                            <td class="px-4 py-3">
+                                <span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-medium border border-yellow-200">Pendiente</span>
+                            </td>
+                            <td class="px-4 py-3 text-right">
+                                <button
+                                    @click="openAssignModal(pr)"
+                                    class="text-indigo-600 hover:text-indigo-900 font-medium bg-indigo-50 px-3 py-1.5 rounded"
+                                >
+                                    Asignar paseador
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -722,6 +879,132 @@ const deleteReservation = () => {
             </div>
         </div>
     </Modal>
+
+    <!-- ============================================================ -->
+    <!-- Modal 3: Crear reserva libre (sin paseador)                -->
+    <!-- ============================================================ -->
+    <Modal :show="showFreeCreateModal" max-width="md" @close="closeFreeCreateModal">
+        <div class="p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h2 class="text-base font-semibold text-gray-800">Nueva reserva manual</h2>
+                <button @click="closeFreeCreateModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+            </div>
+
+            <form @submit.prevent="submitFreeReservation" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <!-- Fecha -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Fecha <span class="text-red-500">*</span></label>
+                        <input v-model="freeCreateForm.date" type="date" required
+                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400"
+                            :class="{ 'border-red-400': freeCreateForm.errors.date }" />
+                        <p v-if="freeCreateForm.errors.date" class="text-xs text-red-500 mt-1">{{ freeCreateForm.errors.date }}</p>
+                    </div>
+
+                    <!-- Hora Inicio -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Hora Inicio <span class="text-red-500">*</span></label>
+                        <input v-model="freeCreateForm.start_time" type="time" required
+                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400"
+                            :class="{ 'border-red-400': freeCreateForm.errors.start_time }" />
+                        <p v-if="freeCreateForm.errors.start_time" class="text-xs text-red-500 mt-1">{{ freeCreateForm.errors.start_time }}</p>
+                    </div>
+                </div>
+
+                <!-- Duracion -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Duración (horas) <span class="text-red-500">*</span></label>
+                    <div class="flex items-center gap-3">
+                        <div class="flex items-center border rounded-lg overflow-hidden">
+                            <button type="button" @click="freeCreateForm.hours = Math.max(1, freeCreateForm.hours - 1)" class="px-3 py-2 text-gray-500 hover:bg-gray-100 font-medium">−</button>
+                            <span class="px-4 py-2 text-sm font-semibold min-w-[3rem] text-center">{{ freeCreateForm.hours }}h</span>
+                            <button type="button" @click="freeCreateForm.hours = freeCreateForm.hours + 1" class="px-3 py-2 text-gray-500 hover:bg-gray-100 font-medium">+</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cliente -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Cliente <span class="text-red-500">*</span></label>
+                    <input v-model="freeCreateForm.client_name" type="text" placeholder="Nombre completo" required
+                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400"
+                        :class="{ 'border-red-400': freeCreateForm.errors.client_name }" />
+                    <p v-if="freeCreateForm.errors.client_name" class="text-xs text-red-500 mt-1">{{ freeCreateForm.errors.client_name }}</p>
+                </div>
+
+                <!-- Distrito -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Distrito <span class="text-red-500">*</span></label>
+                    <select v-model="freeCreateForm.district_id" required
+                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400"
+                        :class="{ 'border-red-400': freeCreateForm.errors.district_id }">
+                        <option value="" disabled>Selecciona un distrito</option>
+                        <option v-for="d in districts" :key="d.id" :value="d.id">{{ d.name }}</option>
+                    </select>
+                    <p v-if="freeCreateForm.errors.district_id" class="text-xs text-red-500 mt-1">{{ freeCreateForm.errors.district_id }}</p>
+                </div>
+
+                <!-- Notas -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Notas</label>
+                    <textarea v-model="freeCreateForm.notes" rows="2" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 resize-none"></textarea>
+                </div>
+
+                <!-- Acciones -->
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" @click="closeFreeCreateModal" class="px-4 py-2 text-sm rounded-lg border text-gray-600 hover:bg-gray-50">Cancelar</button>
+                    <button type="submit" :disabled="freeCreateForm.processing" class="px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">
+                        {{ freeCreateForm.processing ? 'Guardando...' : 'Crear reserva' }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </Modal>
+
+    <!-- ============================================================ -->
+    <!-- Modal 4: Asignar paseador                                    -->
+    <!-- ============================================================ -->
+    <Modal :show="showAssignModal" max-width="md" @close="closeAssignModal">
+        <div v-if="assigningReservation" class="p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h2 class="text-base font-semibold text-gray-800">Asignar Paseador</h2>
+                <button @click="closeAssignModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+            </div>
+
+            <dl class="space-y-2 text-sm mb-6 bg-gray-50 p-4 rounded-lg">
+                <div class="flex"><dt class="w-24 text-gray-500">Fecha</dt><dd class="font-medium">{{ assigningReservation.date }}</dd></div>
+                <div class="flex"><dt class="w-24 text-gray-500">Hora</dt><dd class="font-medium">{{ assigningReservation.start_time.slice(0,5) }} – {{ assigningReservation.end_time.slice(0,5) }}</dd></div>
+                <div class="flex"><dt class="w-24 text-gray-500">Cliente</dt><dd class="font-medium">{{ assigningReservation.client_name }}</dd></div>
+            </dl>
+
+            <form @submit.prevent="submitAssign" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Seleccionar Paseador Disponible</label>
+                    <select v-model="assignForm.paseador_id" required
+                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400"
+                        :class="{ 'border-red-400': assignForm.errors.paseador_id }">
+                        <option value="" disabled>Selecciona un paseador</option>
+                        <option v-for="p in availablePaseadoresForPending" :key="p.id" :value="p.id">
+                            {{ p.name }}
+                        </option>
+                    </select>
+                    <p v-if="assignForm.errors.paseador_id" class="text-xs text-red-500 mt-1">{{ assignForm.errors.paseador_id }}</p>
+
+                    <p v-if="availablePaseadoresForPending.length === 0" class="text-xs text-red-500 mt-2 flex items-center gap-1">
+                        ⚠️ No hay paseadores con disponibilidad para esta fecha/hora/distrito libre de cruces.
+                    </p>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" @click="closeAssignModal" class="px-4 py-2 text-sm rounded-lg border text-gray-600 hover:bg-gray-50">Cancelar</button>
+                    <button type="submit" :disabled="assignForm.processing || availablePaseadoresForPending.length === 0" class="px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
+                        {{ assignForm.processing ? 'Asignando...' : 'Asignar' }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </Modal>
+    </AuthenticatedLayout>
 </template>
 
 <style>

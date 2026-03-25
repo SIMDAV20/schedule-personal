@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useForm } from "@inertiajs/vue3";
 import { computed } from "vue";
+import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 
 interface District {
     id: number;
@@ -18,20 +19,11 @@ interface Availability {
 const props = defineProps<{
     availabilities: Availability[];
     districts: District[];
+    days: Record<string, string>;
 }>();
 
-const days = [
-    { id: 1, name: "Lunes" },
-    { id: 2, name: "Martes" },
-    { id: 3, name: "Miércoles" },
-    { id: 4, name: "Jueves" },
-    { id: 5, name: "Viernes" },
-    { id: 6, name: "Sábado" },
-    { id: 7, name: "Domingo" },
-];
-
 const form = useForm({
-    day: 1,
+    day: Object.keys(props.days)[0] ?? "1",
     start_time: "",
     end_time: "",
     district_ids: [] as number[],
@@ -43,8 +35,8 @@ const remove = (id: number) => useForm({}).delete(`/availability/${id}`);
 
 const availabilitiesByDay = computed(() => {
     const map: Record<string, Availability[]> = {};
-    days.forEach((d) => {
-        map[String(d.id)] = [];
+    Object.keys(props.days).forEach((key) => {
+        map[key] = [];
     });
     props.availabilities.forEach((a) => {
         const dayStr = String(a.day);
@@ -59,7 +51,11 @@ const availabilitiesByDay = computed(() => {
 </script>
 
 <template>
-    <div class="max-w-2xl mx-auto p-6 space-y-6">
+    <AuthenticatedLayout>
+        <template #header>
+            <h2 class="font-semibold text-xl text-gray-800 leading-tight">Mi Horario</h2>
+        </template>
+        <div class="max-w-2xl mx-auto p-6 space-y-6">
         <h1 class="text-xl font-semibold">My availability</h1>
 
         <form @submit.prevent="submit" class="space-y-3 border rounded-lg p-4">
@@ -70,8 +66,8 @@ const availabilitiesByDay = computed(() => {
                         v-model="form.day"
                         class="block border rounded px-3 py-2 capitalize text-sm"
                     >
-                        <option v-for="d in days" :key="d.id" :value="d.id">
-                            {{ d.name }}
+                        <option v-for="(name, id) in props.days" :key="id" :value="id">
+                            {{ name }}
                         </option>
                     </select>
                 </div>
@@ -130,13 +126,11 @@ const availabilitiesByDay = computed(() => {
         </form>
 
         <!-- Slots grouped by day -->
-        <div v-for="day in days" :key="day.id" class="flex gap-3">
-            <span class="text-sm font-medium capitalize w-24 pt-1">{{
-                day.name
-            }}</span>
+        <div v-for="(name, id) in props.days" :key="id" class="flex gap-3">
+            <span class="text-sm font-medium capitalize w-24 pt-1">{{ name }}</span>
             <div class="flex flex-wrap gap-2">
                 <div
-                    v-for="slot in availabilitiesByDay[String(day.id)]"
+                    v-for="slot in availabilitiesByDay[String(id)]"
                     :key="slot.id"
                     class="bg-indigo-50 text-indigo-900 text-xs rounded-lg px-3 py-1.5"
                 >
@@ -155,11 +149,12 @@ const availabilitiesByDay = computed(() => {
                     </button>
                 </div>
                 <span
-                    v-if="availabilitiesByDay[String(day.id)].length === 0"
+                    v-if="!availabilitiesByDay[String(id)] || availabilitiesByDay[String(id)].length === 0"
                     class="text-xs text-gray-300 pt-1"
                     >—</span
                 >
             </div>
         </div>
-    </div>
+        </div>
+    </AuthenticatedLayout>
 </template>

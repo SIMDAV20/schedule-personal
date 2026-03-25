@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Availability;
 use App\Models\District;
+use App\Models\Reservation;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -31,8 +32,14 @@ class ScheduleController extends Controller
             ])
             ->get();
 
+        $pendingReservations = Reservation::whereNull('paseador_id')
+                                    ->with('district')
+                                    ->orderBy('date')
+                                    ->get();
+
         return Inertia::render('Admin/Schedule', [
             'paseadores'       => $paseadores,
+            'pendingReservations' => $pendingReservations,
             'districts'        => District::orderBy('name')->get(),
             'selectedDistrict' => $districtId ? (int)$districtId : null,
             'days'             => array_values(Availability::DAYS),

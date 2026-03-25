@@ -43,6 +43,11 @@ You are an expert in Laravel 12, Inertia.js, Vue 3, and TypeScript.
 - Reservations belong to a paseador (User) and a District
 - Admin schedule view supports filtering by district_id via query param
 - Paseador schedule view shows their own availabilities grouped by day
+- Reservations allow null `paseador_id` (reservas sin paseador).
+- Reservation statuses: `pending` (sin paseador asignado), `confirmed` (paseador asignado), `cancelled` (cancelada soft, no se elimina).
+- Flujo A (desde el calendario / paseador conocido): Click en evento disponible → Modal crear (fecha+hora pre-llenada, paseador fijo) → Al guardar: status = `confirmed`.
+- Flujo B (sin paseador): Botón "Nueva reserva" en el header → Modal crear (admin llena todo manualmente) → Al guardar: status = `pending`, `paseador_id` = null.
+- Asignación posterior: Tabla de pendientes → "Asignar paseador" → Select con TODOS los paseadores (sin filtro) → Advertencia visual si el paseador no tiene disponibilidad en esa hora → Al guardar: status = `confirmed`.
 
 ## File structure
 - Pages live in resources/js/Pages/{Role}/{PageName}.vue
@@ -54,5 +59,5 @@ You are an expert in Laravel 12, Inertia.js, Vue 3, and TypeScript.
 - User: { id: number, name: string, email: string, role: 'admin' | 'paseador' }
 - District: { id: number, name: string, slug: string }
 - Availability: { id: number, user_id: number, day: Day, start_time: string, end_time: string, districts: District[] }
-- Reservation: { id: number, paseador_id: number, district_id: number, date: string, start_time: string, end_time: string, customer_name: string | null }
+- Reservation: { id: number, paseador_id: number | null, district_id: number, date: string, start_time: string, end_time: string, customer_name: string | null, status: 'pending' | 'confirmed' | 'cancelled' }
 - Day: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'

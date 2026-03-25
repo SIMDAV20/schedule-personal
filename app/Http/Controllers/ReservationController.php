@@ -11,7 +11,7 @@ class ReservationController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'paseador_id'  => 'required|exists:users,id',
+            'paseador_id'  => 'nullable|exists:users,id',
             'date'         => 'required|date',
             'start_time'   => 'required',
             'end_time'     => 'required',
@@ -20,9 +20,25 @@ class ReservationController extends Controller
             'notes'        => 'nullable|string',
         ]);
 
+        $data['status'] = isset($data['paseador_id']) ? 'confirmed' : 'pending';
+
         Reservation::create($data);
 
         return to_route('admin.schedule');
+    }
+
+    public function assign(Request $request, Reservation $reservation)
+    {
+        $data = $request->validate([
+            'paseador_id' => 'required|exists:users,id',
+        ]);
+
+        $reservation->update([
+            'paseador_id' => $data['paseador_id'],
+            'status'      => 'confirmed',
+        ]);
+
+        return back();
     }
 
     public function destroy(Reservation $reservation)

@@ -33,6 +33,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('/districts/{district}', [DistrictController::class, 'destroy']);
 
         Route::post('/reservations', [ReservationController::class, 'store']);
+        Route::put('/reservations/{reservation}/assign', [ReservationController::class, 'assign']);
         Route::delete('/reservations/{reservation}', [ReservationController::class, 'destroy']);
     });
     
