@@ -1,36 +1,67 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import ApplicationLogo from '@/Components/ApplicationLogo.vue';
-import Dropdown from '@/Components/Dropdown.vue';
-import DropdownLink from '@/Components/DropdownLink.vue';
-import NavLink from '@/Components/NavLink.vue';
-import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
-import { Link, usePage } from '@inertiajs/vue3';
-import { PageProps } from '@/types';
+import { ref, computed, watch } from "vue";
+import ApplicationLogo from "@/Components/ApplicationLogo.vue";
+import Dropdown from "@/Components/Dropdown.vue";
+import DropdownLink from "@/Components/DropdownLink.vue";
+import NavLink from "@/Components/NavLink.vue";
+import ResponsiveNavLink from "@/Components/ResponsiveNavLink.vue";
+import { Link, usePage } from "@inertiajs/vue3";
+import { PageProps } from "@/types";
 
 const showingNavigationDropdown = ref(false);
 
 const page = usePage<PageProps>();
-const user = computed(() => page.props.auth?.user);
+const user = computed(() => {
+    return page.props.auth?.user;
+});
 const navigation = computed(() => {
-    const role = user.value?.role ?? 'guest';
-    if (role === 'admin') {
+    const role = user.value?.role ?? "guest";
+    if (role === "admin") {
         return [
-            { name: 'Horario', href: route('admin.schedule'), active: route().current('admin.schedule') },
+            {
+                name: "Horario",
+                href: route("admin.schedule"),
+                active: route().current("admin.schedule"),
+            },
+            {
+                name: "Distritos",
+                href: route("admin.districts"),
+                active: route().current("admin.districts"),
+            },
+            {
+                name: "Reservas",
+                href: route("admin.reservations"),
+                active: route().current("admin.reservations"),
+            },
         ];
     }
     return [
-        { name: 'Horario', href: route('schedule'), active: route().current('schedule') },
+        {
+            name: "Horario",
+            href: route("schedule"),
+            active: route().current("schedule"),
+        },
     ];
+});
+
+const flash = computed(() => {
+    return page.props?.flash || {};
+});
+
+watch(flash, (newValue) => {
+    if (newValue.success || newValue.error) {
+        setTimeout(() => {
+            flash.value.success = undefined;
+            flash.value.error = undefined;
+        }, 3000);
+    }
 });
 </script>
 
 <template>
     <div>
         <div class="min-h-screen bg-gray-100">
-            <nav
-                class="border-b border-gray-100 bg-white"
-            >
+            <nav class="border-b border-gray-100 bg-white">
                 <!-- Primary Navigation Menu -->
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div class="flex h-16 justify-between">
@@ -168,13 +199,9 @@ const navigation = computed(() => {
                     </div>
 
                     <!-- Responsive Settings Options -->
-                    <div
-                        class="border-t border-gray-200 pb-1 pt-4"
-                    >
+                    <div class="border-t border-gray-200 pb-1 pt-4">
                         <div class="px-4">
-                            <div
-                                class="text-base font-medium text-gray-800"
-                            >
+                            <div class="text-base font-medium text-gray-800">
                                 {{ user?.name }}
                             </div>
                             <div class="text-sm font-medium text-gray-500">
@@ -199,14 +226,31 @@ const navigation = computed(() => {
             </nav>
 
             <!-- Page Heading -->
-            <header
-                class="bg-white shadow"
-                v-if="$slots.header"
-            >
+            <header class="bg-white shadow" v-if="$slots.header">
                 <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
                     <slot name="header" />
                 </div>
+
             </header>
+
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-2" v-if="flash">
+                <div
+                    v-if="flash?.success"
+                    class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative"
+                    role="alert"
+                >
+                    <strong class="font-bold">¡Éxito! </strong>
+                    <span class="block sm:inline">{{ flash.success }}</span>
+                </div>
+                <div
+                    v-if="flash?.error"
+                    class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
+                    role="alert"
+                >
+                    <strong class="font-bold">¡Error! </strong>
+                    <span class="block sm:inline">{{ flash.error }}</span>
+                </div>
+            </div>
 
             <!-- Page Content -->
             <main>

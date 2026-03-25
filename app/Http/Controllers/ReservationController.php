@@ -7,6 +7,13 @@ use Illuminate\Http\Request;
 
 class ReservationController extends Controller
 {
+    public function index()
+    {
+        return inertia('Admin/Reservations', [
+            'reservations' => Reservation::with(['paseador', 'district'])->latest('date')->get(),
+        ]);
+    }
+
     // ReservationController@store
     public function store(Request $request)
     {
@@ -38,12 +45,12 @@ class ReservationController extends Controller
             'status'      => 'confirmed',
         ]);
 
-        return back();
+        return to_route('admin.schedule', status: 303);
     }
 
     public function destroy(Reservation $reservation)
     {
         $reservation->delete();
-        return to_route('admin.schedule');
+        return to_route('admin.schedule', status: 303);
     }
 }

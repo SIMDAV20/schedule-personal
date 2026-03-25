@@ -10,6 +10,10 @@ export type PageProps<T extends Record<string, unknown> = Record<string, unknown
     auth: {
         user: User;
     };
+    flash: {
+        success?: string;
+        error?: string;
+    };
 };
 
 export type Day = 0 | 1 | 2 | 3 | 4 | 5 | 6

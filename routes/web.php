@@ -32,6 +32,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/districts', [DistrictController::class, 'store']);
         Route::delete('/districts/{district}', [DistrictController::class, 'destroy']);
 
+        Route::get('/reservations', [ReservationController::class, 'index'])->name('admin.reservations');
         Route::post('/reservations', [ReservationController::class, 'store']);
         Route::put('/reservations/{reservation}/assign', [ReservationController::class, 'assign']);
         Route::delete('/reservations/{reservation}', [ReservationController::class, 'destroy']);

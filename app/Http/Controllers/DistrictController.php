@@ -24,12 +24,16 @@ class DistrictController extends Controller
             'slug'       => Str::slug($data['name']),
             'created_by' => auth()->id(),
         ]);
-        return back();
+        return to_route('admin.districts');
     }
 
     public function destroy(District $district)
     {
+        if ($district->availabilities()->count() > 0) {
+            return to_route('admin.districts')->with('error', 'El distrito tiene reservas activas');
+        }
+
         $district->delete();
-        return back();
+        return to_route('admin.districts');
     }
 }

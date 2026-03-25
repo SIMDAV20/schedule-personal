@@ -35,8 +35,9 @@ Flujo B — sin paseador
   → Modal crear: admin llena todo manualmente
   → Al guardar: status = pending, paseador_id = null
 
-Asignación posterior
-  Tabla de pendientes → "Asignar paseador"
-  → Select con TODOS los paseadores (sin filtro)
-  → Advertencia visual si el paseador no tiene disponibilidad en esa hora
+Asignación posterior (Desde la tabla de reservas pendientes)
+  → Muestra información de la reserva: fecha, hora, cliente
+  → Primer Select: Paseadores Disponibles (sin cruce de horarios y con disponibilidad en el día/distrito)
+  → Segundo Select: Todos los paseadores (para asignar de manera forzada si coordina externamente)
   → Al guardar: status = confirmed
+```

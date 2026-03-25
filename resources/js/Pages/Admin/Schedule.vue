@@ -353,9 +353,17 @@ const openModal = (arg: EventClickArg) => {
     const accentColor = paseadorColorMap.value.get(paseador.id)?.[1] ?? "#6366f1";
 
     const dayName = jsDayToString[start.getDay()];
-    const reservedHours = paseador.reservations
+    const reservedHours: string[] = [];
+    paseador.reservations
         .filter((r) => jsDayToString[new Date(r.date).getDay()] === dayName)
-        .map((r) => r.start_time.slice(0, 5));
+        .forEach((r) => {
+            let h = parseInt(r.start_time.slice(0, 2));
+            const endH = parseInt(r.end_time.slice(0, 2));
+            while (h < endH) {
+                reservedHours.push(`${pad(h)}:00`);
+                h++;
+            }
+        });
 
     const free = firstFreeHour(slotStart, slotEnd, reservedHours);
     const max = maxConsecutiveFreeHours(free, slotEnd, reservedHours);
@@ -658,7 +666,7 @@ const submitAssign = () => {
                     </thead>
                     <tbody class="divide-y text-gray-700">
                         <tr v-for="pr in pendingReservations" :key="pr.id" class="hover:bg-gray-50 transition-colors">
-                            <td class="px-4 py-3">{{ pr.date }}</td>
+                            <td class="px-4 py-3">{{ pr.date.slice(0, 10) }}</td>
                             <td class="px-4 py-3 truncate">{{ pr.start_time.slice(0,5) }} – {{ pr.end_time.slice(0,5) }}</td>
                             <td class="px-4 py-3">{{ pr.client_name }}</td>
                             <td class="px-4 py-3">{{ pr.district?.name || '—' }}</td>
@@ -708,19 +716,10 @@ const submitAssign = () => {
                 </span>
             </div>
 
-            <!-- Fecha y hora de inicio (read-only) -->
-            <div class="bg-gray-50 rounded-lg px-4 py-2.5 mb-5 text-sm text-gray-600 flex flex-wrap items-center gap-x-4 gap-y-1">
-                <span>📅 <span class="font-medium">{{ createSlot.date }}</span></span>
-                <span class="text-gray-400">|</span>
-                <span>Disponibilidad: <span class="font-medium">{{ createSlot.slotStart }} – {{ createSlot.slotEnd }}</span></span>
-                <span class="text-gray-400">|</span>
-                <span>Inicio: <span class="font-medium">{{ createSlot.firstFree }}</span></span>
-            </div>
-
             <form @submit.prevent="submitReservation" class="space-y-4">
-
                 <!-- Número de horas -->
                 <div>
+                    <span class="mb-2">Inicio: <span class="font-medium">{{ createSlot.firstFree }}</span></span>
                     <label class="block text-sm font-medium text-gray-700 mb-2">
                         Duración <span class="text-red-500">*</span>
                         <span class="text-gray-400 font-normal ml-1">(máx. {{ createSlot.maxHours }}h disponibles)</span>
@@ -972,15 +971,15 @@ const submitAssign = () => {
             </div>
 
             <dl class="space-y-2 text-sm mb-6 bg-gray-50 p-4 rounded-lg">
-                <div class="flex"><dt class="w-24 text-gray-500">Fecha</dt><dd class="font-medium">{{ assigningReservation.date }}</dd></div>
+                <div class="flex"><dt class="w-24 text-gray-500">Fecha</dt><dd class="font-medium">{{ assigningReservation.date.slice(0, 10) }}</dd></div>
                 <div class="flex"><dt class="w-24 text-gray-500">Hora</dt><dd class="font-medium">{{ assigningReservation.start_time.slice(0,5) }} – {{ assigningReservation.end_time.slice(0,5) }}</dd></div>
                 <div class="flex"><dt class="w-24 text-gray-500">Cliente</dt><dd class="font-medium">{{ assigningReservation.client_name }}</dd></div>
             </dl>
 
-            <form @submit.prevent="submitAssign" class="space-y-4">
+            <form class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Seleccionar Paseador Disponible</label>
-                    <select v-model="assignForm.paseador_id" required
+                    <select v-model="assignForm.paseador_id"
                         class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400"
                         :class="{ 'border-red-400': assignForm.errors.paseador_id }">
                         <option value="" disabled>Selecciona un paseador</option>
@@ -988,16 +987,29 @@ const submitAssign = () => {
                             {{ p.name }}
                         </option>
                     </select>
-                    <p v-if="assignForm.errors.paseador_id" class="text-xs text-red-500 mt-1">{{ assignForm.errors.paseador_id }}</p>
 
-                    <p v-if="availablePaseadoresForPending.length === 0" class="text-xs text-red-500 mt-2 flex items-center gap-1">
+                    <p v-if="availablePaseadoresForPending.length === 0" class="text-xs text-yellow-600 mt-2 flex items-center gap-1">
                         ⚠️ No hay paseadores con disponibilidad para esta fecha/hora/distrito libre de cruces.
                     </p>
                 </div>
 
-                <div class="flex justify-end gap-3 pt-2">
+                <div class="pt-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">O Asignar Cualquier Paseador (Forzar)</label>
+                    <select v-model="assignForm.paseador_id" required
+                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400"
+                        :class="{ 'border-red-400': assignForm.errors.paseador_id }">
+                        <option value="" disabled>Selecciona un paseador (Todos)</option>
+                        <option v-for="p in paseadores" :key="'all-'+p.id" :value="p.id">
+                            {{ p.name }}
+                        </option>
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1 mb-2">Permite coordinar de manera externa y asignar a un paseador aunque no esté disponible.</p>
+                    <p v-if="assignForm.errors.paseador_id" class="text-xs text-red-500 mt-1">{{ assignForm.errors.paseador_id }}</p>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
                     <button type="button" @click="closeAssignModal" class="px-4 py-2 text-sm rounded-lg border text-gray-600 hover:bg-gray-50">Cancelar</button>
-                    <button type="submit" :disabled="assignForm.processing || availablePaseadoresForPending.length === 0" class="px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
+                    <button type="button" @click="submitAssign" :disabled="assignForm.processing || !assignForm.paseador_id" class="px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
                         {{ assignForm.processing ? 'Asignando...' : 'Asignar' }}
                     </button>
                 </div>
