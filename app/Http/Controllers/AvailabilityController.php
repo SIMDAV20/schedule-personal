@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Availability;
 use App\Models\District;
+use App\Models\Reservation;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -68,11 +69,32 @@ class AvailabilityController extends Controller
         return back();
     }
 
-    public function destroy(Availability $availability) {
+    public function destroy(Request $request, Availability $availability) {
+        // Find if there are future confirmed reservations in this slot
+        $hasReservations = Reservation::where('paseador_id', $availability->user_id)
+            ->where('status', 'confirmed')
+            ->whereDate('date', '>=', now())
+            ->whereRaw('DAYOFWEEK(date) = ?', [($availability->day % 7) + 1])
+            ->where(function ($q) use ($availability) {
+                // Check if any part of the reservation falls within the availability range
+                $q->where(function ($q2) use ($availability) {
+                    $q2->where('start_time', '>=', $availability->start_time)
+                        ->where('start_time', '<', $availability->end_time);
+                })->orWhere(function ($q2) use ($availability) {
+                    $q2->where('end_time', '>', $availability->start_time)
+                        ->where('end_time', '<=', $availability->end_time);
+                });
+            })
+            ->exists();
+
+        if ($hasReservations && !$request->boolean('force')) {
+            return back()->with('error', 'Esta disponibilidad tiene reservas programadas en el futuro. Eliminarla no cancelará las reservas existentes. Por favor, usa el botón de confirmación si estás seguro.');
+        }
+
         $availability->delete();
 
         \App\Events\AvailabilityUpdated::dispatch();
 
-        return back();
+        return back()->with('success', 'Disponibilidad eliminada correctamente.');
     }
 }

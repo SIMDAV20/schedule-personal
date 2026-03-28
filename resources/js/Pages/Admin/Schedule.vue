@@ -105,14 +105,30 @@ const jsDayToString: Record<number, string> = {
  * FullCalendar needs real ISO dates. We anchor to the current week so that
  * the "timeGridWeek" view shows the correct column for each day name.
  */
+/** 
+ * Returns "YYYY-MM-DD" for a given Spanish day name, 
+ * anchored to the current visible week (Monday to Sunday).
+ */
 const getDateForDayName = (dayName: string): string => {
     const today = new Date();
-    const currentDay = today.getDay(); // 0 = Sunday
+    const dayOfToday = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    
+    // Calculate distance to this week's Monday
+    // (If today is Sunday (0), we go back 6 days. Else we go back to day 1).
+    const mondayShift = (dayOfToday === 0 ? -6 : 1 - dayOfToday);
+    
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + mondayShift);
+    
     const target = dayNameToNumber[dayName] ?? 0;
-    const diff = target - currentDay;
-    const date = new Date(today);
-    date.setDate(today.getDate() + diff);
-    return date.toISOString().slice(0, 10); // YYYY-MM-DD
+    // Calculate shift from Monday (0..6)
+    // Sunday in our dayNameToNumber is 0, so it becomes shift 6.
+    const shiftFromMonday = (target === 0 ? 6 : target - 1);
+    
+    const targetDate = new Date(monday);
+    targetDate.setDate(monday.getDate() + shiftFromMonday);
+    
+    return `${targetDate.getFullYear()}-${pad(targetDate.getMonth() + 1)}-${pad(targetDate.getDate())}`;
 };
 
 // ---------------------------------------------------------------------------
@@ -149,11 +165,12 @@ const mergedSlots = computed<MergedSlot[]>(() => {
                 for (const d of av.districts) districtMap.set(d.id, d);
             }
 
-            // Reservas de este paseador que caen dentro del horario de este slot
+            // Reservas de este paseador para el día específico calculado para este slot
+            const date = getDateForDayName(day);
             const slotReservations = paseador.reservations.filter((r) => {
-                const d = new Date(r.date);
+                const rDateStr = r.date.slice(0, 10);
                 return (
-                    jsDayToString[d.getDay()] === day &&
+                    rDateStr === date &&
                     r.start_time.slice(0, 5) >= slotStart &&
                     r.end_time.slice(0, 5) <= slotEnd
                 );
@@ -347,15 +364,17 @@ const openModal = (arg: EventClickArg) => {
 
     const start = arg.event.start!;
     const end = arg.event.end ?? arg.event.start!;
-    const dateStr = start.toISOString().slice(0, 10);
-    const slotStart = start.toTimeString().slice(0, 5);
-    const slotEnd = end.toTimeString().slice(0, 5);
+    
+    // YYYY-MM-DD format using local time components to avoid UTC shift
+    const dateStr = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
+    const slotStart = `${pad(start.getHours())}:${pad(start.getMinutes())}`;
+    const slotEnd = `${pad(end.getHours())}:${pad(end.getMinutes())}`;
     const accentColor = paseadorColorMap.value.get(paseador.id)?.[1] ?? "#6366f1";
 
     const dayName = jsDayToString[start.getDay()];
     const reservedHours: string[] = [];
     paseador.reservations
-        .filter((r) => jsDayToString[new Date(r.date).getDay()] === dayName)
+        .filter((r) => r.date.slice(0, 10) === dateStr)
         .forEach((r) => {
             let h = parseInt(r.start_time.slice(0, 2));
             const endH = parseInt(r.end_time.slice(0, 2));
@@ -427,7 +446,7 @@ const openDetailModal = (reservation: Reservation, paseadorName: string, accentC
     reservationDetail.value = {
         id: reservation.id,
         paseadorName,
-        date: new Date(reservation.date).toISOString().slice(0, 10),
+        date: reservation.date.slice(0, 10),
         startTime: reservation.start_time.slice(0, 5),
         endTime: reservation.end_time.slice(0, 5),
         clientName: reservation.client_name ?? "",
@@ -469,11 +488,12 @@ const freeCreateForm = useForm({
 const openFreeCreateModal = (dateObj?: Date) => {
     freeCreateForm.reset();
     if (dateObj) {
-        freeCreateForm.date = dateObj.toISOString().slice(0, 10);
-        freeCreateForm.start_time = dateObj.toTimeString().slice(0, 5);
+        freeCreateForm.date = `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}`;
+        freeCreateForm.start_time = `${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}`;
         freeCreateForm.hours = 1;
     } else {
-        freeCreateForm.date = new Date().toISOString().slice(0, 10);
+        const now = new Date();
+        freeCreateForm.date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${now.getDate()}`;
         freeCreateForm.start_time = "09:00";
         freeCreateForm.hours = 1;
     }
@@ -511,7 +531,7 @@ const availablePaseadoresForPending = computed(() => {
     
     const r = assigningReservation.value;
     const districtId = r.district_id;
-    const resDay = jsDayToString[new Date(r.date + 'T12:00:00').getDay()]; // Avoid timezone skew
+    const resDay = jsDayToString[new Date(r.date.slice(0, 10) + 'T12:00:00').getDay()]; // Extra robust day mapping
     
     return props.paseadores.filter(p => {
         // Condition 1: Has availability
@@ -526,7 +546,7 @@ const availablePaseadoresForPending = computed(() => {
 
         // Condition 2: No conflicting reservations
         const hasConflict = p.reservations.some(pres => {
-            return pres.date === r.date &&
+            return pres.date.slice(0, 10) === r.date.slice(0, 10) &&
                    !(pres.end_time.slice(0,5) <= r.start_time.slice(0,5) || 
                      pres.start_time.slice(0,5) >= r.end_time.slice(0,5));
         });

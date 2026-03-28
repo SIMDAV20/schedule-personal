@@ -43,6 +43,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/availability', [AvailabilityController::class, 'store']);
         Route::put('/availability/{availability}', [AvailabilityController::class, 'update']);
         Route::delete('/availability/{availability}', [AvailabilityController::class, 'destroy']);
+
+        Route::get('/reservations', [ReservationController::class, 'index'])->name('reservations');
     });
 });
 

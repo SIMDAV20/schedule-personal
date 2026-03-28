@@ -37,9 +37,14 @@ const navigation = computed(() => {
     }
     return [
         {
-            name: "Horario",
+            name: "Mi Horario",
             href: route("schedule"),
             active: route().current("schedule"),
+        },
+        {
+            name: "Mis Reservas",
+            href: route("reservations"),
+            active: route().current("reservations"),
         },
     ];
 });

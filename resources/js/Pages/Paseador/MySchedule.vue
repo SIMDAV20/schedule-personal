@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useForm } from "@inertiajs/vue3";
+import { useForm, router, usePage } from "@inertiajs/vue3";
 import { computed } from "vue";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 
@@ -31,7 +31,21 @@ const form = useForm({
 
 const submit = () =>
     form.post("/availability", { onSuccess: () => form.reset() });
-const remove = (id: number) => useForm({}).delete(`/availability/${id}`);
+const page = usePage();
+const remove = (id: number) => {
+    const hasError = (page.props as any).flash?.error?.includes('reservas programadas');
+    
+    const message = hasError 
+        ? "¡Atención! Este horario tiene reservas. Si lo eliminas, las reservas SE MANTENDRÁN pero no recibirás nuevas. ¿Deseas forzar la eliminación?"
+        : "¿Estás seguro de que deseas eliminar esta disponibilidad?";
+
+    if (confirm(message)) {
+        router.delete(`/availability/${id}`, {
+            data: { force: hasError },
+            preserveScroll: true,
+        });
+    }
+};
 
 const availabilitiesByDay = computed(() => {
     const map: Record<string, Availability[]> = {};

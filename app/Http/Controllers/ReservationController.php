@@ -7,11 +7,36 @@ use Illuminate\Http\Request;
 
 class ReservationController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return inertia('Admin/Reservations', [
-            'reservations' => Reservation::with(['paseador', 'district'])->latest('date')->get(),
-        ]);
+        $user = auth()->user();
+        $search = $request->query('search');
+        $status = $request->query('status');
+
+        $query = Reservation::with(['paseador', 'district']);
+
+        if ($user->role === 'paseador') {
+            $query->where('paseador_id', $user->id);
+        }
+
+        if ($search) {
+            $query->where('client_name', 'like', "%{$search}%");
+        }
+
+        if ($status) {
+            $query->where('status', $status);
+        }
+
+        $reservations = $query->latest('date')->latest('start_time')->get();
+
+        $props = [
+            'reservations' => $reservations,
+            'filters' => $request->only(['search', 'status']),
+        ];
+
+        return $user->role === 'admin'
+            ? inertia('Admin/Reservations', $props)
+            : inertia('Paseador/MyReservations', $props);
     }
 
     // ReservationController@store
